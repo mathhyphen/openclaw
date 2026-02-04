@@ -1,71 +1,86 @@
 # Feishu (Lark) Channel Plugin
 
-This plugin integrates **Feishu (Lark)** messaging with OpenClaw, allowing you to use Feishu as a chat interface for your AI assistant.
+此插件将 **飞书 (Feishu/Lark)** 集成到 OpenClaw 中，使您能够通过飞书机器人与 AI 助手进行对话。
 
-## Features
+## 🛠 安装步骤
 
-- **Receive Messages**: Listens for messages from Feishu users via Webhook (V2 event format).
-- **Auto-Reply**: Automatically replies to users using the configured Agent/Model.
-- **Secure**: Supports Feishu's AES encryption (`encryptKey`) and token verification (`verificationToken`).
-- **Policy Control**: Configure who can talk to the bot via `dmPolicy` and `allowFrom`.
+由于 OpenClaw 支持多种运行模式，您可以选择以下任一方式安装：
 
-## Setup Guide
+### 方式 A：通过 OpenClaw 命令行安装 (推荐用于生产)
+在终端中运行以下命令，将插件安装到全局配置目录：
 
-### 1. Create a Feishu App
+```bash
+openclaw plugins install ./extensions/feishu
+```
 
-1. Go to the [Feishu Open Platform](https://open.feishu.cn/app) (or Lark Open Platform).
-2. Create a specific app (企业自建应用).
-3. In **Credentials & Basic Info**, get your `App ID` and `App Secret`.
+### 方式 B：本地开发模式 (推荐用于调试)
+如果您在 OpenClaw 源码目录下开发，插件会自动从 `extensions/` 目录加载。只需运行：
 
-### 2. Configure Permissions
+```bash
+node openclaw.mjs gateway
+```
 
-Enable the following permissions in **Permissions & Scopes**:
-- `im:message` (Access messages)
-- `im:message.p2p_msg` (Read private messages)
-- `im:message.p2p_msg:readonly`
-- `im:message:send_as_bot` (Send messages as bot)
+---
 
-*Remember to create a version and release the app for permissions to take effect.*
+## ⚙ 配置文件说明
 
-### 3. Configure Event Subscription (Webhook)
+编辑您的 OpenClaw 配置文件（通常位于 `~/.openclaw/openclaw.json`），添加以下内容：
 
-1. Go to **Event Subscriptions**.
-2. Set the **Request URL** to your OpenClaw Gateway address:
-   - Example: `https://your-tailscale-domain.ts.net/feishu/events`
-   - *Note: You must use a public URL (like Tailscale Funnel) or a tunnel.*
-3. Set an **Encrypt Key** (recommended).
-4. Get the **Verification Token**.
-5. Add the event type: **Receive Message** (`im.message.receive_v1`).
-
-### 4. Configure OpenClaw
-
-Add the following to your `~/.openclaw/openclaw.json` (or `moltbot.json`):
+### 1. 频道配置 (`channels`)
+在 `channels` 对象下添加 `feishu` 字段：
 
 ```json
-{
-  "channels": {
-    "feishu": {
-      "enabled": true,
-      "appId": "cli_xxxxxxxx",
-      "appSecret": "your_app_secret",
-      "encryptKey": "your_encrypt_key",
-      "verificationToken": "your_verification_token",
-      "webhookPath": "/feishu/events",
-      "dmPolicy": "open"
-    }
-  },
-  "plugins": {
-    "allow": ["feishu"]
+"channels": {
+  "feishu": {
+    "enabled": true,
+    "appId": "cli_xxxxxxxx",          // 飞书应用的 App ID
+    "appSecret": "xxxxxxxx",          // 飞书应用的 App Secret
+    "encryptKey": "xxxxxxxx",         // 飞书事件订阅的 Encrypt Key (如未开启可省略)
+    "verificationToken": "xxxxxxx",   // 飞书事件订阅的 Verification Token
+    "webhookPath": "/feishu/events",  // 必须与代码中注册的路径一致
+    "dmPolicy": "open"                // 消息策略：open (任何人), pairing (需配对)
   }
 }
 ```
 
-## Usage
+### 2. 插件启用 (`plugins`)
+确保在插件列表中启用了 `feishu`：
 
-- **Direct Message**: Just send a message to your bot in Feishu.
-- **Group Chat**: Add the bot to a group. Mention the bot (`@BotName`) to talk to it (if `groupPolicy` is `allowlist` or `open`).
+```json
+"plugins": {
+  "enabled": true,
+  "entries": {
+    "feishu": {
+      "enabled": true
+    }
+  }
+}
+```
 
-## Troubleshooting
+---
 
-- **400 Bad Request**: Check if `encryptKey` matches the one in Feishu console.
-- **No Reply**: Check OpenClaw logs for `[Feishu Plugin]` entries. Ensure the bot has `im:message:send_as_bot` permission.
+## 🚀 飞书后台设置指南
+
+1.  **创建应用**：在 [飞书开放平台](https://open.feishu.cn/app) 创建一个“企业自建应用”。
+2.  **开启机器人**：在“应用功能”中开启“机器人”功能。
+3.  **配置权限**：在“权限管理”中勾选以下权限：
+    *   `im:message` (读取消息)
+    *   `im:message.p2p_msg:readonly` (读取用户发给机器人的单聊消息)
+    *   `im:message:send_as_bot` (以机器人身份发送消息)
+4.  **设置 Webhook**：在“事件订阅”中：
+    *   **请求地址**：填写 `http://您的公网IP:18789/feishu/events` (或使用 Tailscale Funnel 提供的 HTTPS 地址)。
+    *   **添加事件**：添加“接收消息 V1.0” (`im.message.receive_v1`)。
+5.  **发布应用**：修改权限或事件后，必须在“版本管理与发布”中创建一个新版本并发布，设置才会生效。
+
+---
+
+## 📝 使用说明
+
+*   **私聊**：直接向机器人发送消息，它会调用 OpenClaw 配置的主模型进行回复。
+*   **群聊**：将机器人拉入群聊，@机器人 即可触发对话。
+
+## 🔍 故障排查
+
+*   **收到消息不回复**：检查飞书后台是否开启了 `im:message:send_as_bot` 权限，并确保已发布版本。
+*   **Webhook 验证失败**：确保 `webhookPath` 在配置和飞书后台完全一致（默认为 `/feishu/events`）。
+*   **日志调试**：查看 OpenClaw Gateway 的控制台输出，寻找以 `[Feishu]` 开头的日志信息。
